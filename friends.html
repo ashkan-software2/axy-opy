@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Friend Tagger (Table)</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f6f6f6;
+      padding: 12px;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
+    th {
+      text-align: left;
+      font-size: 0.85rem;
+      color: #666;
+      background: #fafafa;
+    }
+    tr.draggable {
+      cursor: grab;
+    }
+    tr.dragging {
+      opacity: 0.4;
+    }
+    .section {
+      background: #111;
+      color: #fff;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .tag {
+      background: #eef;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+    }
+    .tag span {
+      margin-left: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      font-size: 0.9rem;
+    }
+    textarea {
+      width: 100%;
+      resize: vertical;
+      min-height: 36px;
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Friend Tagger</h1>
+
+  <table id="table">
+    <thead>
+      <tr>
+        <th style="width: 25%">Name</th>
+        <th style="width: 45%">Tags</th>
+        <th style="width: 30%">Comments</th>
+      </tr>
+    </thead>
+    <tbody id="body"></tbody>
+  </table>
+
+  <script>
+    const STORAGE_KEY = 'friend-table-v1';
+
+    let data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    let knownTags = new Set();
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      render();
+    }
+
+    function addSection(title) {
+      data.push({ type: 'section', title });
+      save();
+    }
+
+    function addPerson(afterIndex) {
+      data.splice(afterIndex + 1, 0, { type: 'person', name: '', tags: [], comment: '' });
+      save();
+    }
+
+    function removeTag(row, i) {
+      row.tags.splice(i, 1);
+      save();
+    }
+
+    function addTag(row, input) {
+      const value = input.value.trim();
+      if (!value) return;
+      row.tags.push(value);
+      knownTags.add(value);
+      input.value = '';
+      save();
+    }
+
+    function render() {
+      const body = document.getElementById('body');
+      body.innerHTML = '';
+      knownTags = new Set();
+
+      data.forEach((row, index) => {
+        if (row.type === 'section') {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td colspan="3" class="section">${row.title}</td>`;
+          body.appendChild(tr);
+          return;
+        }
+
+        row.tags.forEach(t => knownTags.add(t));
+
+        const tr = document.createElement('tr');
+        tr.className = 'draggable';
+        tr.draggable = true;
+        tr.dataset.index = index;
+
+        tr.innerHTML = `
+          <td>
+            <input placeholder="Name" value="${row.name}" oninput="data[${index}].name=this.value;save()" />
+          </td>
+          <td>
+            <div class="tags">
+              ${row.tags.map((t,i)=>`<div class="tag">${t}<span onclick="removeTag(data[${index}],${i})">×</span></div>`).join('')}
+            </div>
+            <input list="taglist" placeholder="Add tag" onkeydown="if(event.key==='Enter') addTag(data[${index}],this)" />
+          </td>
+          <td>
+            <textarea placeholder="Notes" oninput="data[${index}].comment=this.value;save()">${row.comment}</textarea>
+          </td>
+        `;
+
+        body.appendChild(tr);
+      });
+
+      const datalist = document.getElementById('taglist') || document.createElement('datalist');
+      datalist.id = 'taglist';
+      datalist.innerHTML = [...knownTags].map(t => `<option value="${t}"></option>`).join('');
+      document.body.appendChild(datalist);
+
+      enableDrag();
+    }
+
+    function enableDrag() {
+      let dragIndex = null;
+
+      document.querySelectorAll('tr.draggable').forEach(tr => {
+        tr.addEventListener('dragstart', e => {
+          dragIndex = +tr.dataset.index;
+          tr.classList.add('dragging');
+        });
+        tr.addEventListener('dragend', e => {
+          tr.classList.remove('dragging');
+        });
+        tr.addEventListener('dragover', e => e.preventDefault());
+        tr.addEventListener('drop', e => {
+          const targetIndex = +tr.dataset.index;
+          const [moved] = data.splice(dragIndex, 1);
+          data.splice(targetIndex, 0, moved);
+          save();
+        });
+      });
+    }
+
+    if (data.length === 0) {
+      addSection('Close');
+      addPerson(0);
+      addSection('Potential');
+      addPerson(2);
+      addSection('Ready to Remove');
+      addPerson(4);
+    }
+
+    render();
+  </script>
+</body>
+</html>
